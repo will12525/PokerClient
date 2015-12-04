@@ -16,32 +16,31 @@ import java.util.List;
  */
 public class Main extends Canvas {
 
-    private Socket socket;
-    private BufferedReader fromServer;
-    private PrintWriter toServer;
-    private BufferedReader clientInput;
-    private boolean running = true;
-    private boolean blind = false;
-    private int totalMoney=0;
-    private int currentBet=0;
-    private int totalBet = 0;
-    private int highBet=0;
-    private int pot;
-    private List<Card> cards = new ArrayList<>();
-    private List<Card> dealerCards = new ArrayList<>();
     private List<String> messages = new ArrayList<>();
-    private Deck deck;
+    private List<Card> cards = new ArrayList<>(),dealerCards = new ArrayList<>();
+    private int highBet=0;
+    private boolean askForBet = false,blind=false,askForAnti = false;
+    private int totalBet=0,currentBet=0,totalMoney=0,buyInMin=0,buyInMax=0;
+    private boolean askForBuyIn = false;
+    private int pot=0;
+    private List<Card> winningHand = new ArrayList<>();
+    private int winnings=0;
     private String clientName;
+    private boolean winner=false,newGame=false;
 
-    private boolean askForAnti = false;
-    private boolean askForBet = false;
-
-    private int buyInMin,buyInMax;
 
     private JFrame frame;
+    private Socket socket;
+    private BufferedReader clientInput;
+    private MessageSender sender;
+    private Deck deck;
 
     public Main() throws IOException {
-
+        clientName=JOptionPane.showInputDialog("Please enter your name");
+        if(clientName==null)
+        {
+            System.exit(0);
+        }
         final int port = 5000;
         final String host = "localhost";
         deck = new Deck(1);
@@ -49,36 +48,23 @@ public class Main extends Canvas {
             socket = new Socket(host,port);
         }catch (ConnectException e)
         {
+            System.out.println("Server not open");
+            System.exit(0);
         }
 
-        toServer = new PrintWriter(socket.getOutputStream(),true);
         clientInput = new BufferedReader(new InputStreamReader(System.in));
 
-       /* System.out.print("please enter a name: ");
-        clientName=clientInput.readLine();
+        new MessageReciever(this,socket);
+        sender = new MessageSender(this,socket);
 
-        toServer.println(clientName);*/
-        new MessageReciever(this,socket,clientInput,toServer);
-        MessageReciever.MessageSender sender = new MessageReciever.MessageSender(clientInput,toServer);
-
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        /*do {
-            System.out.println("Please enter how much money you would like to buy in with\nMinimum: "+buyInMin+", Maximum: "+buyInMax);
-            totalMoney=getNum(0);
-            System.out.println(totalMoney + ", " + buyInMin);
-        }while(totalMoney<buyInMin);
-
-        toServer.println("11"+totalMoney);
-*/
         createFrame();
         while(true)
         {
             render();
+            if(messages.size()>0) {
+                System.out.println(messages.get(0));
+                messages.remove(0);
+            }
         }
 
     }
@@ -105,16 +91,29 @@ public class Main extends Canvas {
 
         if(askForAnti)
         {
-            g.drawString("An anti of "+buyInMin+" is needed",450,140);
-            g.drawString("Please enter your anti or begin betting",450,160);
+            g.drawString("An anti of "+buyInMin+" is needed",400,140);
+            g.drawString("Please enter your anti or begin betting",400,160);
             if(blind&&(highBet<=buyInMin))
             {
-                g.drawString("You only need to provide "+buyInMin/2+" as you are the blind",450,180);
+                g.drawString("You only need to provide "+buyInMin/2+" as you are the blind",400,180);
             }
         }
         if(askForBet)
         {
-            g.drawString("Please make a bet ",450,140);
+            g.drawString("Please make a bet ",400,140);
+        }
+        if(askForBuyIn)
+        {
+            g.drawString("Please enter how much you would like to buy in with",400,140);
+            g.drawString("The minimum buy in is "+buyInMin,400,160);
+        }
+        if(winner)
+        {
+            g.drawString("You won the pot! "+pot,400,140);
+        }
+        if(newGame)
+        {
+            g.drawString("A new game will be starting soon",400,140);
         }
 
         for(int x=0;x<cards.size();x++)
@@ -129,19 +128,14 @@ public class Main extends Canvas {
             BufferedImage img = card.getCard();
             g.drawImage(img,100*(x+1),20,img.getWidth(),img.getHeight(),null);
         }
-
         g.dispose();
         bs.show();
     }
     public void close()
     {
         try {
-            toServer.println("exit");
-            toServer.close();
             clientInput.close();
             socket.close();
-            running = false;
-
         }catch (IOException e)
         {
 
@@ -176,117 +170,149 @@ public class Main extends Canvas {
         }
         return theNumber;
     }
+     /*
+            c0 chat
+            c1 receive player cards
+            c2 get dealer cards
+            c3 get high bet
+            c4 request bet
+            c5 tells player if blind
+            c6 requests anti
+            c7 get total bet for the round
+            c8 get current bet for the betting instance
+            c9 get total player money
+            c10 gets buyInMin
+            c11 gets buyInMax
 
+            c12 request buy in money
+            c13 gets pot
+            c14 gets winning hand
+            c15 get winnings
+            c16 request name
+            c17 check connection
+            c18 new game
+    */
+    public void addMessage(String message)
+     {
+         messages.add(message);
+     }
     public void addCard(String card)
     {
         cards.add(deck.getCard(card));
-    }
-    public List<Card> getCards()
-    {
-        return cards;
     }
     public void addDealerCard(String card)
     {
         dealerCards.add(deck.getCard(card));
     }
-    public List<Card> getDealerCards()
-    {
-        return dealerCards;
-    }
     public void setHighBet(int bet)
     {
         highBet=bet;
     }
-    public int getHighBet()
+    public void askForBet()
     {
-        return highBet;
+        askForBet=true;
+        int bet;
+        int userBet;
+        do{
+            userBet = getNum(0);
+            bet = currentBet+userBet;
+        }while(bet<highBet&&userBet>totalMoney);
+        sender.addMessage("04"+bet);
+        askForBet=false;
     }
     public void setBlind()
     {
         blind = true;
     }
-    public boolean checkBlind()
+    public void askForAnti()
     {
-        return blind;
-    }
-    public void sendToServer(String message)
-    {
-        System.out.println("sending");
-        toServer.println(message);
+        askForAnti=true;
+        int bet;
+        int userBet;
+        do{
+            userBet = getNum(0);
+            bet = currentBet+userBet;
+        }while(bet<buyInMin&&bet<highBet&&userBet>totalMoney);
+        sender.addMessage("06"+bet);
+        askForAnti=false;
     }
     public void setTotalBet(int tBet)
     {
         totalBet=tBet;
     }
-    public int getTotalBet()
-    {
-        return totalBet;
-    }
     public void setCurrentBet(int cBet)
     {
         currentBet=cBet;
-    }
-    public int getCurrentBet()
-    {
-        return currentBet;
     }
     public void setTotalMoney(int tMon)
     {
         totalMoney=tMon;
     }
-    public int getTotalMoney()
-    {
-        return totalMoney;
-    }
-
     public void setMin(int min)
     {
         buyInMin=min;
-    }
-    public int getMin()
-    {
-        return buyInMin;
     }
     public void setMax(int max)
     {
         buyInMax=max;
     }
-    public int getMax()
+    public void requestBuyInMoney()
     {
-        return buyInMax;
+        askForBuyIn=true;
+        int buyIn;
+        int toSend;
+        do{
+            buyIn = getNum(0);
+            toSend = currentBet+buyIn;
+        }while(toSend<buyInMin);
+        sender.addMessage("12"+toSend);
+        askForBuyIn=false;
     }
     public void setPot(int pot)
     {
         this.pot=pot;
     }
-    public int getPot()
+    public void theWinningHand(boolean winner,String winningHandS)
     {
-        return pot;
+        this.winner=winner;
+        if(!winner)
+        {
+            String card1 = winningHandS.substring(winningHandS.indexOf(",")-1);
+            System.out.println(card1);
+            System.out.println(winningHandS.substring(card1.length()+1));
+
+            winningHand.add(deck.getCard(card1));
+            winningHand.add(deck.getCard(winningHandS.substring(card1.length()+1)));
+        }
     }
-    public void askForBet()
+    public void setWinnings(int muns)
     {
-        askForBet=true;
-        int bet = 0;
-        do{
-            bet = currentBet+getNum(0);
-        }while(bet<=buyInMin);
-        sendToServer("08" + bet);
-        askForBet=false;
+        winnings=muns;
     }
-    public void askForAnti()
+    public void requestName()
     {
-        askForAnti=true;
-        int bet = 0;
-        do{
-            bet = currentBet+getNum(0);
-        }while(bet<=buyInMin);
-        sendToServer("08" + bet);
-        askForAnti=false;
+        sender.addMessage("16"+clientName);
     }
-    public void addMessage(String message)
+    public void sayHello()
     {
-        messages.add(message);
+        sender.addMessage("17");
     }
+    public void newGame()
+    {
+        newGame=true;
+        cards.clear();
+        dealerCards.clear();
+        winningHand.clear();
+        highBet=0;
+        askForBet = false;
+        blind=false;
+        askForAnti = false;
+        totalBet=0;
+        currentBet=0;
+        askForBuyIn=false;
+        deck=new Deck(1);
+    }
+
     public static void main(String[] args) throws Exception
     {
         new Main();
