@@ -10,12 +10,13 @@ public class MessageReciever extends Thread {
     Main main;
     BufferedReader fromServer;
     Decode decode;
-
-    public MessageReciever(Main main, Socket socket) throws IOException
+    MessageSender sender;
+    public MessageReciever(Main main, Socket socket,MessageSender sender) throws IOException
     {
         fromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         this.main=main;
-        decode=new Decode(main);
+        this.sender=sender;
+        decode=new Decode(main,sender);
         start();
     }
     public void run()
@@ -31,13 +32,18 @@ public class MessageReciever extends Thread {
                         main.close();
                         return;
                     }
+                    else if (message.substring(0, 2).equals("17")) {
+                        System.out.println("Must respond");
+                        sender.addMessage("17");
+                    }
                     else {
+
                         decode.addMessage(message);
                     }
                 }
-            }catch (IOException e)
+            }catch (Exception e)
             {
-              interrupt();
+
             }
         }
     }

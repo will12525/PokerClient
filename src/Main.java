@@ -19,21 +19,23 @@ public class Main extends Canvas {
     private List<String> messages = new ArrayList<>();
     private List<Card> cards = new ArrayList<>(),dealerCards = new ArrayList<>();
     private int highBet=0;
-    private boolean askForBet = false,blind=false,askForAnti = false;
-    private int totalBet=0,currentBet=0,totalMoney=0,buyInMin=0,buyInMax=0;
+    private boolean blind=false;
+    private int totalBet=0,totalMoney=0,buyInMin=0,buyInMax=0;
     private boolean askForBuyIn = false;
     private int pot=0;
-    private List<Card> winningHand = new ArrayList<>();
-    private int winnings=0;
+    private String winningHand;
+    private String winnings="";
     private String clientName;
     private boolean winner=false,newGame=false;
-
-
+    private boolean fold = false;
+    private boolean gameOver = false;
+    private String winningPlayer="";
     private JFrame frame;
     private Socket socket;
     private BufferedReader clientInput;
     private MessageSender sender;
     private Deck deck;
+    private String totalPlayers="";
 
     public Main() throws IOException {
         clientName=JOptionPane.showInputDialog("Please enter your name");
@@ -54,12 +56,18 @@ public class Main extends Canvas {
 
         clientInput = new BufferedReader(new InputStreamReader(System.in));
 
-        new MessageReciever(this,socket);
+
         sender = new MessageSender(this,socket);
+        new MessageReciever(this,socket,sender);
 
         createFrame();
         while(true)
         {
+            try {
+                Thread.sleep(16);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             render();
             if(messages.size()>0) {
                 System.out.println(messages.get(0));
@@ -88,24 +96,14 @@ public class Main extends Canvas {
         g.drawString("Money: "+ totalMoney,450,60);
         g.drawString("Your bet: "+totalBet,450,80);
         g.drawString("The pot: "+pot,450,100);
+        g.drawString("High bet: "+highBet,450,120);
 
-        if(askForAnti)
+        g.drawString("There is "+totalPlayers+" people playing",200,20);
+        if(gameOver)
         {
-            g.drawString("An anti of "+buyInMin+" is needed",400,140);
-            g.drawString("Please enter your anti or begin betting",400,160);
-            if(blind&&(highBet<=buyInMin))
-            {
-                g.drawString("You only need to provide "+buyInMin/2+" as you are the blind",400,180);
-            }
-        }
-        if(askForBet)
-        {
-            g.drawString("Please make a bet ",400,140);
-        }
-        if(askForBuyIn)
-        {
-            g.drawString("Please enter how much you would like to buy in with",400,140);
-            g.drawString("The minimum buy in is "+buyInMin,400,160);
+           g.drawString(winningPlayer+" won with a: ",450,160);
+            g.drawString(winningHand,450,180);
+            g.drawString(winnings,450,200);
         }
         if(winner)
         {
@@ -115,7 +113,6 @@ public class Main extends Canvas {
         {
             g.drawString("A new game will be starting soon",400,140);
         }
-
         for(int x=0;x<cards.size();x++)
         {
             Card card = cards.get(x);
@@ -126,7 +123,7 @@ public class Main extends Canvas {
         {
             Card card = dealerCards.get(x);
             BufferedImage img = card.getCard();
-            g.drawImage(img,100*(x+1),20,img.getWidth(),img.getHeight(),null);
+            g.drawImage(img,70*(x+1),20,img.getWidth(),img.getHeight(),null);
         }
         g.dispose();
         bs.show();
@@ -155,7 +152,7 @@ public class Main extends Canvas {
         frame.setVisible(true);
 
     }
-    public int getNum(int increments)
+    public int getNum(int increments,String text)
     {
         if(increments>30)
         {
@@ -163,10 +160,16 @@ public class Main extends Canvas {
         }
         int theNumber;
         try {
-            theNumber = Integer.parseInt(clientInput.readLine());
+            String sNum = JOptionPane.showInputDialog(text);
+            if(sNum==null)
+            {
+                folded();
+                return -1;
+            }
+            theNumber = Integer.parseInt(sNum);
         } catch (Exception e) {
             System.out.println("Please enter a valid number");
-            return getNum(increments);
+            return getNum(increments++,text);
         }
         return theNumber;
     }
@@ -210,15 +213,19 @@ public class Main extends Canvas {
     }
     public void askForBet()
     {
-        askForBet=true;
+
         int bet;
         int userBet;
         do{
-            userBet = getNum(0);
-            bet = currentBet+userBet;
-        }while(bet<highBet&&userBet>totalMoney);
-        sender.addMessage("04"+bet);
-        askForBet=false;
+            userBet = getNum(0,"Please enter your bet\nTo fold press cancel, enter 0 to check");
+            if(userBet==-1)
+            {
+                return;
+            }
+            bet = totalBet+userBet;
+            System.out.println(bet+", "+totalBet+", "+highBet);
+        }while(bet<highBet||userBet>totalMoney);
+        sender.addMessage("04"+userBet);
     }
     public void setBlind()
     {
@@ -226,23 +233,30 @@ public class Main extends Canvas {
     }
     public void askForAnti()
     {
-        askForAnti=true;
+        newGame=false;
         int bet;
         int userBet;
+        int filler = buyInMin;
+        if(highBet>buyInMin)
+        {
+            filler=highBet;
+        }
         do{
-            userBet = getNum(0);
-            bet = currentBet+userBet;
-        }while(bet<buyInMin&&bet<highBet&&userBet>totalMoney);
-        sender.addMessage("06"+bet);
-        askForAnti=false;
+            userBet = getNum(0,"An anti of "+(filler-totalBet)+" is needed, please\n"+
+                    "enter your anti or begin betting.\n"+
+                    "To fold press cancel, enter 0 to check");
+            if(userBet==-1)
+            {
+                return;
+            }
+            bet = totalBet+userBet;
+
+        }while(bet<buyInMin||bet<highBet||userBet>totalMoney);
+        sender.addMessage("06"+userBet);
     }
     public void setTotalBet(int tBet)
     {
         totalBet=tBet;
-    }
-    public void setCurrentBet(int cBet)
-    {
-        currentBet=cBet;
     }
     public void setTotalMoney(int tMon)
     {
@@ -258,15 +272,18 @@ public class Main extends Canvas {
     }
     public void requestBuyInMoney()
     {
-        askForBuyIn=true;
         int buyIn;
         int toSend;
         do{
-            buyIn = getNum(0);
-            toSend = currentBet+buyIn;
+
+            buyIn = getNum(0,"Please enter how much you would like\nto buy in with.\nThe minimum buy in is "+buyInMin);
+            if(buyIn==-1)
+            {
+                System.exit(0);
+            }
+            toSend = totalBet+buyIn;
         }while(toSend<buyInMin);
         sender.addMessage("12"+toSend);
-        askForBuyIn=false;
     }
     public void setPot(int pot)
     {
@@ -274,18 +291,24 @@ public class Main extends Canvas {
     }
     public void theWinningHand(boolean winner,String winningHandS)
     {
+        gameOver=true;
+        //players name, the hand
         this.winner=winner;
+
         if(!winner)
         {
-            String card1 = winningHandS.substring(winningHandS.indexOf(",")-1);
-            System.out.println(card1);
-            System.out.println(winningHandS.substring(card1.length()+1));
-
-            winningHand.add(deck.getCard(card1));
-            winningHand.add(deck.getCard(winningHandS.substring(card1.length()+1)));
+            winningPlayer=winningHandS.substring(0,winningHandS.indexOf(","));
+            winningHand=winningHandS.substring(winningHandS.indexOf(",")+1);
+            winnings="They won "+winnings;
+        }
+        else
+        {
+            winningPlayer="You";
+            winningHand=winningHandS.substring(winningHandS.indexOf(",")+1);
+            winnings="You won "+winnings;
         }
     }
-    public void setWinnings(int muns)
+    public void setWinnings(String muns)
     {
         winnings=muns;
     }
@@ -293,24 +316,29 @@ public class Main extends Canvas {
     {
         sender.addMessage("16"+clientName);
     }
-    public void sayHello()
+    public void folded()
     {
-        sender.addMessage("17");
+        fold = true;
+        sender.addMessage("19");
     }
     public void newGame()
     {
+        gameOver=false;
         newGame=true;
         cards.clear();
         dealerCards.clear();
-        winningHand.clear();
+        winningHand="";
+        winnings="";
+        winner=false;
         highBet=0;
-        askForBet = false;
         blind=false;
-        askForAnti = false;
         totalBet=0;
-        currentBet=0;
         askForBuyIn=false;
         deck=new Deck(1);
+    }
+    public void setPlayers(String amount)
+    {
+        totalPlayers = amount;
     }
 
     public static void main(String[] args) throws Exception
