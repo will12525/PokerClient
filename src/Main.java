@@ -5,7 +5,6 @@ import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -58,7 +57,7 @@ public class Main extends Canvas {
 
 
         sender = new MessageSender(this,socket);
-        new MessageReciever(this,socket,sender);
+        new MessageReceiver(this,socket,sender);
 
         createFrame();
         while(true)
@@ -98,11 +97,11 @@ public class Main extends Canvas {
         g.drawString("The pot: "+pot,450,100);
         g.drawString("High bet: "+highBet,450,120);
 
-        g.drawString("There is "+totalPlayers+" people playing",200,20);
+        g.drawString("There are "+totalPlayers+" people playing",200,20);
         if(gameOver)
         {
            g.drawString(winningPlayer+" won with a: ",450,160);
-            g.drawString(winningHand,450,180);
+            g.drawString(winningHand,400,180);
             g.drawString(winnings,450,200);
         }
         if(winner)
@@ -173,28 +172,7 @@ public class Main extends Canvas {
         }
         return theNumber;
     }
-     /*
-            c0 chat
-            c1 receive player cards
-            c2 get dealer cards
-            c3 get high bet
-            c4 request bet
-            c5 tells player if blind
-            c6 requests anti
-            c7 get total bet for the round
-            c8 get current bet for the betting instance
-            c9 get total player money
-            c10 gets buyInMin
-            c11 gets buyInMax
 
-            c12 request buy in money
-            c13 gets pot
-            c14 gets winning hand
-            c15 get winnings
-            c16 request name
-            c17 check connection
-            c18 new game
-    */
     public void addMessage(String message)
      {
          messages.add(message);
@@ -282,7 +260,7 @@ public class Main extends Canvas {
                 System.exit(0);
             }
             toSend = totalBet+buyIn;
-        }while(toSend<buyInMin);
+        }while(toSend<buyInMin||toSend>buyInMax);
         sender.addMessage("12"+toSend);
     }
     public void setPot(int pot)

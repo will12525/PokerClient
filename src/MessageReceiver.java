@@ -6,17 +6,17 @@ import java.net.Socket;
 /**
  * Created by lawrencew on 12/2/2015.
  */
-public class MessageReciever extends Thread {
+public class MessageReceiver extends Thread {
     Main main;
     BufferedReader fromServer;
     Decode decode;
     MessageSender sender;
-    public MessageReciever(Main main, Socket socket,MessageSender sender) throws IOException
+    public MessageReceiver(Main main, Socket socket, MessageSender sender) throws IOException
     {
         fromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         this.main=main;
         this.sender=sender;
-        decode=new Decode(main,sender);
+        decode=new Decode(main);
         start();
     }
     public void run()
@@ -38,7 +38,7 @@ public class MessageReciever extends Thread {
                     }
                     else {
 
-                        decode.addMessage(message);
+                        decode.sendMessage(message);
                     }
                 }
             }catch (Exception e)
